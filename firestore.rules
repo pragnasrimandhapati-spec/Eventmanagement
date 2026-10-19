@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Keep this list identical to ADMIN_EMAILS in firebase-config.js
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email.lower() in ['admin@eventhub.com'];
+    }
+
+    // Account profiles
+    match /users/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Event registrations
+    match /registrations/{regId} {
+      // participants see only their own; admin sees all
+      allow read: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+
+      // only participants (not admin) can register, one per event per user
+      allow create: if request.auth != null
+        && !isAdmin()
+        && request.resource.data.uid == request.auth.uid
+        && regId == request.auth.uid + '_' + string(request.resource.data.eventId)
+        && request.resource.data.people in [1, 2, 3, 4];
+
+      // cancel own registration; admin can remove any
+      allow delete: if request.auth != null
+        && (resource.data.uid == request.auth.uid || isAdmin());
+
+      allow update: if false;
+    }
+  }
+}
